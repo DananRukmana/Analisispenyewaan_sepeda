@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 st.header('Analisis Perilaku Customer Dalam Penyewaan Sepeda  :sparkles:')
-st.subheader('Analisis penyewaan pertanggal')
+st.subheader('Analisis penyewaan Perkondisi')
 
 # Membaca dataset
 url1 = "https://raw.githubusercontent.com/DananRukmana/DananRukmana/refs/heads/main/hour.csv"
