@@ -1,106 +1,115 @@
-import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import streamlit as st
+from babel.numbers import format_currency
+sns.set(style='dark')
 
-st.header('Analisis Perilaku Customer Dalam Penyewaan Sepeda  :sparkles:')
-st.subheader('Analisis penyewaan Perkondisi')
-
+st.header('Analisis Perilaku Customer Dalam Penyewaan Sepeda :sparkles:')
 # Membaca dataset
 url1 = "https://raw.githubusercontent.com/DananRukmana/DananRukmana/refs/heads/main/hour.csv"
 url2 = "https://raw.githubusercontent.com/DananRukmana/DananRukmana/refs/heads/main/day.csv"
-df1 = pd.read_csv(url1)
-df_hour = pd.DataFrame(df1)
-df2 = pd.read_csv(url2)
-df_day = pd.DataFrame(df2)
+df_hour = pd.read_csv(url1)
+df_day = pd.read_csv(url2)
 
-# Visualisasi 1: Tren Penyewaan Sepeda per Jam
-jam_sibuk = df_hour.groupby('hr')['cnt'].sum()
-fig, ax = plt.subplots(figsize=(12, 5))
-ax.plot(jam_sibuk.index, jam_sibuk.values, marker='o', linestyle='-', color='g')
-ax.set_xlabel('Jam dalam Sehari')
-ax.set_ylabel('Rata-rata Jumlah Penyewaan sepeda')
-ax.set_title('Tren Penyewaan Sepeda per Jam')
-ax.set_xticks(range(0, 24))
-ax.grid()
-st.pyplot(fig)
+def create_byhour_df(df):
+    byhour_df = df.groupby(by="hr")["cnt"].sum().reset_index()
+    byhour_df.rename(columns={
+        "cnt": "total_penyewa"
+    }, inplace=True)
+    
+    return byhour_df
 
-st.subheader("Analisis Kondisi Saat Customer Melakukan Penyewaan")
+def create_byweather_df(df):
+    byweather_df = df.groupby(by="weathersit")["cnt"].sum().reset_index()
+    byweather_df.rename(columns={
+        "cnt": "total_penyewa"
+    }, inplace=True)
+    
+    return byweather_df
 
-# Fungsi untuk mengelompokkan waktu
-def kelompok_waktu(jam):
-    if 0 <= jam < 6:
-        return "Malam (00:00-05:59)"
-    elif 6 <= jam < 12:
-        return "Pagi (06:00-11:59)"
-    elif 12 <= jam < 18:
-        return "Siang (12:00-17:59)"
-    else:
-        return "Sore (18:00-23:59)"
+df_hour['dteday'] = pd.to_datetime(df_hour['dteday'])
+df_day['dteday'] = pd.to_datetime(df_day['dteday'])
 
-df_hour["kategori_waktu"] = df_hour["hr"].apply(kelompok_waktu)
+min_date = df_hour["dteday"].min()
+max_date = df_hour["dteday"].max()
 
-# Sidebar
 with st.sidebar:
-    st.header('Dashboard Penyewaan Sepeda 🚴')
+    st.image("https://github.com/dicodingacademy/assets/raw/main/logo.png")
+    start_date, end_date = st.date_input(
+        label='Rentang Waktu', min_value=min_date,
+        max_value=max_date,
+        value=[min_date, max_date]
+    )
 
+main_df = df_hour[(df_hour["dteday"] >= str(start_date)) & 
+                  (df_hour["dteday"] <= str(end_date))]
+main_df_day = df_day[(df_day["dteday"] >= str(start_date)) & 
+                     (df_day["dteday"] <= str(end_date))]
+
+byhour_df = create_byhour_df(main_df)
+byweather_df = create_byweather_df(main_df_day)
+
+st.header('Analisis perilaku penyewa sepeda :sparkles:')
+
+st.subheader('Daily Penyewa per Jam')
+
+col1, col2 = st.columns(2)
+
+if not byhour_df.empty:
+    max_penyewa_idx = byhour_df["total_penyewa"].idxmax()
+    jam_terbanyak = byhour_df.loc[max_penyewa_idx, "hr"]
+    total_penyewa = byhour_df.loc[max_penyewa_idx, "total_penyewa"]
     
-    weather_labels = {
-        1: "Cerah",
-        2: "Berawan",
-        3: "Hujan / Salju Ringan"
-    }
-
-    selected_weather = st.selectbox("🌦️ Pilih Kondisi Cuaca", list(weather_labels.values()))
-
+    with col1:
+        st.metric("Jam Paling Padat Penyewa", value=jam_terbanyak)
     
-    cuaca = df_day.groupby('weathersit')['cnt'].sum()
-    cuaca.index = cuaca.index.map(weather_labels)
+    with col2:
+        st.metric("Total Penyewa", value=total_penyewa)
 
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.plot(byhour_df["hr"], byhour_df["total_penyewa"], marker='o', linestyle='-', color='g')
+    ax.set_xlabel('Jam dalam Sehari')
+    ax.set_ylabel('Total Jumlah Penyewaan Sepeda')
+    ax.set_xticks(range(24))
+    ax.set_title('Tren Penyewaan Sepeda per Jam')
+    ax.grid()
+    st.pyplot(fig)
+else:
+    st.warning("Tidak ada data untuk rentang waktu yang dipilih.")
+
+# Analisis Pengaruh Cuaca
+st.subheader("Pengaruh Cuaca terhadap Penyewaan Sepeda")
+cuaca = byweather_df
+weather_labels = {
+    1: "Cerah",
+    2: "Berawan",
+    3: "Hujan / Salju Ringan"
+}
+cuaca["weathersit"] = cuaca["weathersit"].map(weather_labels)
+
+col1, col2, col3 = st.columns(3)
+if not cuaca.empty:
+    cerah_penyewa = cuaca.loc[cuaca["weathersit"] == "Cerah", "total_penyewa"].sum()
+    berawan_penyewa = cuaca.loc[cuaca["weathersit"] == "Berawan", "total_penyewa"].sum()
+    hujan_penyewa = cuaca.loc[cuaca["weathersit"] == "Hujan / Salju Ringan", "total_penyewa"].sum()
     
-    if "show_percentage" not in st.session_state:
-        st.session_state["show_percentage"] = False
+    with col1:
+        st.metric("Penyewa saat Cuaca Cerah", value=cerah_penyewa)
+    with col2:
+        st.metric("Penyewa saat Cuaca Berawan", value=berawan_penyewa)
+    with col3:
+        st.metric("Penyewa saat Hujan / Salju Ringan", value=hujan_penyewa)
 
-    if st.button("Cek Persentase 📊"):
-        st.session_state["show_percentage"] = True
-
-    if st.session_state["show_percentage"]:
-        percentage = (cuaca[selected_weather] / cuaca.sum()) * 100
-        st.metric(label=f"Persentase Penyewaan Saat **{selected_weather}**", value=f"{percentage:.1f}%")
-
-
-cuaca = df_day.groupby('weathersit').cnt.sum()
-cuaca.index = cuaca.index.map(weather_labels)
-colors = ["green", "gold", "blue"]  
-explode = [0.5 if (w == selected_weather and st.session_state["show_percentage"] and cuaca[w] / cuaca.sum() < 0.05) else
-           0.3 if (w == selected_weather and st.session_state["show_percentage"]) else
-           0 for w in cuaca.index]
-
-
-
-fig, ax = plt.subplots(figsize=(8, 8))
-ax.pie(
-    cuaca.values, labels=cuaca.index, autopct='%1.1f%%',
-    colors=colors, startangle=140, explode=explode,
-    wedgeprops={'edgecolor': 'black', 'linewidth': 1.5}
-)
-ax.set_title("Pengaruh Cuaca terhadap Penyewaan Sepeda", fontsize=14, fontweight='bold')
-ax.legend(title="Kondisi Cuaca", loc="best", fontsize=10)
-st.pyplot(fig)
-
-st.subheader("Analisis Kondisi Pola Penyewaan Kelompok jam")
-
-
-df_hour["kategori_waktu"] = df_hour["hr"].apply(kelompok_waktu)
-waktu_digunakan = df_hour.groupby("kategori_waktu")["cnt"].sum()
-fig, ax = plt.subplots(figsize=(8, 5))
-colors = ["blue", "orange", "green", "red"]  
-sns.barplot(x=waktu_digunakan.index, y=waktu_digunakan.values, palette=colors, ax=ax)
-ax.set_xlabel("Kategori Waktu")
-ax.set_ylabel("Total Peminjaman Sepeda")
-ax.set_title("Peminjaman Sepeda Berdasarkan Waktu Penggunaan")
-ax.set_xticks(range(len(waktu_digunakan)))
-ax.set_xticklabels(waktu_digunakan.index, rotation=30)
-st.pyplot(fig)
-
-st.caption('Danan Rukmana / 08 04 2025')
+    fig, ax = plt.subplots(figsize=(8, 8))
+    colors = ["green", "gold", "blue"]
+    explode = [0.1] * len(cuaca["total_penyewa"]) 
+    ax.pie(
+        cuaca["total_penyewa"].values, labels=cuaca["weathersit"], autopct='%1.1f%%', 
+        colors=colors, startangle=140, explode=explode, 
+        wedgeprops={'edgecolor': 'black', 'linewidth': 1.5}
+    )
+    ax.set_title("Pengaruh Cuaca terhadap Penyewaan Sepeda", fontsize=14, fontweight='bold')
+    st.pyplot(fig)
+else:
+    st.warning("Tidak ada data untuk rentang waktu yang dipilih.")
